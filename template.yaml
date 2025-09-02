@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: FastAPI + Lambda Coordinadora + Step Function para Bitget
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.12
+    MemorySize: 512
+
+Parameters:
+  APIKEY:
+    Type: String
+    Description: "API Key de Bitget"
+  APISECRET:
+    Type: String
+    Description: "API Secret de Bitget"
+  PASSPHRASE:
+    Type: String
+    Description: "Passphrase de Bitget"
+
+Resources:
+  BitgetLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: bitget-layer
+      Description: "Bitget API + dependencias"
+      ContentUri: ./bitget-layer/
+      CompatibleRuntimes:
+        - python3.12
+
+  FastApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: main.handler
+      CodeUri: ./fastapi_app/
+      Environment:
+        Variables:
+          COORDINATOR_LAMBDA_ARN: !GetAtt CoordinatorLambda.Arn
+          FETCH_ORDERS_LAMBDA_ARN: !Ref FetchOrdersLambda 
+      Events:
+        RootApi:
+          Type: Api
+          Properties:
+            Path: /
+            Method: GET
+        OrdersApi:
+          Type: Api
+          Properties:
+            Path: /orders
+            Method: GET
+        GetHistoryApi:
+          Type: Api
+          Properties:
+            Path: /get-history
+            Method: POST
+        GetDocs:
+          Type: Api
+          Properties:
+            Path: /docs
+            Method: GET
+
+
+  CoordinatorLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda_function.lambda_handler
+      CodeUri: ./coordinator/
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: !Ref BitgetOrdersStateMachine
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - states:StartExecution
+              Resource: "*"
+
+  FetchOrdersLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda_function.lambda_handler
+      CodeUri: ./fetch_orders/
+      Layers:
+        - !Ref BitgetLayer
+      Environment:
+        Variables:
+          API_KEY: !Ref APIKEY
+          API_SECRET: !Ref APISECRET
+          PASSPHRASE: !Ref PASSPHRASE
+          S3_BUCKET: "extractor-bitget-bucket"
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource: "arn:aws:s3:::extractor-bitget-bucket/*"
+
+  StepFunctionsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StepFunctionsLambdaInvoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: "*"
+
+  BitgetOrdersStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: BitgetOrdersProcessingStateMachine
+      RoleArn: !GetAtt StepFunctionsExecutionRole.Arn
+      DefinitionString: !Sub |
+        {
+          "Comment": "Procesamiento de órdenes Bitget agrupadas por símbolo y día",
+          "StartAt": "ParallelFetchTasks",
+          "States": {
+            "ParallelFetchTasks": {
+              "Type": "Map",
+              "ItemsPath": "$.tasks",
+              "MaxConcurrency": 5,
+              "Iterator": {
+                "StartAt": "FetchOrdersForDay",
+                "States": {
+                  "FetchOrdersForDay": {
+                    "Type": "Task",
+                    "Resource": "${FetchOrdersLambda.Arn}",
+                    "InputPath": "$",
+                    "End": true
+                  }
+                }
+              },
+              "End": true
+            }
+          }
+        }

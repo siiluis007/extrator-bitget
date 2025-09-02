@@ -1,0 +1,12 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "extrator-bitget-stack"
+resolve_s3 = true
+s3_prefix = "extrator-bitget-stack"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+disable_rollback = true
+image_repositories = []
+parameter_overrides = "APIKEY=\"bg_680026a00a63d58058c738c952ce67a2\" APISECRET=\"7abac4a9404e82830db5f9db5e867a8370c7e59dc74e52615c59552d0afbd7c9\" PASSPHRASE=\"22Dominic22\""
