@@ -7,4 +7,6 @@ __pycache__/
 
 # AWS SAM
 .aws-sam/
+
+# Virtual Environment
 .venv/
