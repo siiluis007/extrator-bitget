@@ -30,6 +30,7 @@ def lambda_handler(event, context):
         tasks = generate_daily_tasks(productType, symbols)
 
         input_data = {
+            "productType": productType,
             "tasks": tasks
         }
 
@@ -41,7 +42,7 @@ def lambda_handler(event, context):
         return {
             "statusCode": 200,
             "body": json.dumps({
-                "message": f"Execution started for {len(tasks)} tasks.",
+                "message": f"Execution started for {len(symbols)} symbols.",
                 "executionArn": response["executionArn"]
             })
         }

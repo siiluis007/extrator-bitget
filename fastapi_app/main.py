@@ -13,6 +13,9 @@ app = FastAPI(
     license_info={
         "name": "MIT License",
     },
+    openapi_url="/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
 lambda_client = boto3.client("lambda")
@@ -22,19 +25,18 @@ class HistoryRequest(BaseModel):
     productType: str
     symbols: List[str]
 
-@app.get("/")
+@app.get("/health")
 def root():
-    return {"message": "FastAPI + Lambda + Step Functions"}
+    return {"messages": "API is healthy"}
 
-
-@app.post("/get-history")
-def get_history(req: HistoryRequest):
+@app.post("/extract-orders/")
+async def extract_orders(request: HistoryRequest):
     response = lambda_client.invoke(
         FunctionName=COORDINATOR_LAMBDA_ARN,
         InvocationType="RequestResponse",
-        Payload=req.json(),
+        Payload=request.json()
     )
-    result = json.loads(response["Payload"].read())
-    return result
+    return {"executionArn": "response['executionArn']"}
+
 
 handler = Mangum(app)

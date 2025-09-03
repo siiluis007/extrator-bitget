@@ -12,8 +12,23 @@ This project is an extractor for Bitget data, likely involving API interactions 
 
 ## Getting Started
 
-Further instructions on how to set up and run this project will be added here.
+To get started with this project, you need to install the dependencies. The dependencies are managed in a central `requirements.txt` file. The `requirements.txt` files in the subdirectories reference the central one.
 
 ### Prerequisites
 
 This project requires the AWS Serverless Application Model (SAM) CLI. Please ensure it is installed and configured in your environment.
+
+### Installation
+
+To install the dependencies for a specific function, navigate to the function's directory and run the following command:
+
+```bash
+pip install -r requirements.txt
+```
+
+For example, to install the dependencies for the `fetch_orders` function, you would run:
+
+```bash
+cd fetch_orders
+pip install -r requirements.txt
+```

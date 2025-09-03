@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: FastAPI + Lambda Coordinadora + Step Function para Bitget
+Description: FastAPI + Lambda Coordinadora
 
 Globals:
   Function:
@@ -37,28 +37,20 @@ Resources:
       Environment:
         Variables:
           COORDINATOR_LAMBDA_ARN: !GetAtt CoordinatorLambda.Arn
-          FETCH_ORDERS_LAMBDA_ARN: !Ref FetchOrdersLambda 
+          FETCH_ORDERS_LAMBDA_ARN: !GetAtt FetchOrdersLambda.Arn
       Events:
-        RootApi:
-          Type: Api
+        HttpApiEvent:
+          Type: HttpApi
           Properties:
-            Path: /
-            Method: GET
-        OrdersApi:
-          Type: Api
-          Properties:
-            Path: /orders
-            Method: GET
-        GetHistoryApi:
-          Type: Api
-          Properties:
-            Path: /get-history
-            Method: POST
-        GetDocs:
-          Type: Api
-          Properties:
-            Path: /docs
-            Method: GET
+            Path: /{proxy+}
+            Method: ANY
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: "*"
 
 
   CoordinatorLambda:
@@ -97,6 +89,26 @@ Resources:
                 - s3:PutObject
               Resource: "arn:aws:s3:::extractor-bitget-bucket/*"
 
+  CollectorLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda_function.lambda_handler
+      CodeUri: ./collector/
+      Environment:
+        Variables:
+          S3_BUCKET: "extractor-bitget-bucket"
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource: 
+                - "arn:aws:s3:::extractor-bitget-bucket"
+                - "arn:aws:s3:::extractor-bitget-bucket/*"
+
   StepFunctionsExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -131,6 +143,7 @@ Resources:
               "Type": "Map",
               "ItemsPath": "$.tasks",
               "MaxConcurrency": 5,
+              "ResultPath": "$.tasks",
               "Iterator": {
                 "StartAt": "FetchOrdersForDay",
                 "States": {
@@ -141,6 +154,16 @@ Resources:
                     "End": true
                   }
                 }
+              },
+              "Next": "CollectResults"
+            },
+            "CollectResults": {
+              "Type": "Task",
+              "Resource": "${CollectorLambda.Arn}",
+              "InputPath": "$",
+              "Parameters": {
+                "productType.$": "$.productType",
+                "tasks.$": "$.tasks"
               },
               "End": true
             }

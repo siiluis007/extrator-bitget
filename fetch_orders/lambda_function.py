@@ -21,7 +21,7 @@ def fetch_order_history(api, params):
             if not data:
                 break
 
-            all_data.extend(data)
+            all_data.extend(iter(data))
 
             if not end_id or end_id == "0":
                 break
@@ -34,16 +34,6 @@ def fetch_order_history(api, params):
             break
 
     return all_data
-
-def group_and_sort_by_symbol(data):
-    grouped = defaultdict(list)
-    for item in data:
-        grouped[item["symbol"]].append(item)
-    grouped_sorted = {
-        symbol: sorted(items, key=lambda x: int(x["cTime"]), reverse=True)
-        for symbol, items in grouped.items()
-    }
-    return grouped_sorted
 
 
 def lambda_handler(event, context):
@@ -81,28 +71,33 @@ def lambda_handler(event, context):
     bitget_client = BitgetApi(apiKey, secretKey, passphrase)
     try:
         response_data = fetch_order_history(bitget_client, params)
-        
+        order_count = len(response_data)    
         if not response_data:
             print(f"No orders found for {params['symbol']} in the given time range.")
         
-        sorted_response = group_and_sort_by_symbol(response_data)
+        sorted_response = sorted(response_data, key=lambda x: x['cTime'])
         
         
         key = (
             f"orders-history/{productType}/{params['symbol']}.json"
-        )
+        )   
+        
+        response_json  ={ 
+            "orders": sorted_response,
+            "orders_count": order_count
+        }
 
         s3.put_object(
             Bucket=bucket,
             Key=key,
-            Body=json.dumps(sorted_response, indent=2)
+            Body=json.dumps(response_json, indent=2)
         )
 
         return {
             "statusCode": 200,
             "s3Key": key,
             "bucket": bucket,
-            "recordCount": len(sorted_response)
+            "orders_count": order_count
         }
 
     except Exception as e:
