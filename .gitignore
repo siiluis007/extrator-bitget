@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+.env
+
+# AWS SAM
+.aws-sam/
+
+# Virtual Environment
+.venv/
